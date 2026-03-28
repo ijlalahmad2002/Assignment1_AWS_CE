@@ -124,7 +124,7 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 2. Click **Roles** → **Create Role**
 3. Select **AWS Account**
 4. Click **Next** and attach the policy: `AmazonS3FullAccess`
-5. Click **Next** and Name the role: `UniEventEC2Role` or `According to your choice`
+5. Click **Next** and Name the role: `UniEventEC2Role`
 6. Click **Create Role**
 
 > This role will be attached to your EC2 instances in Step 5.
@@ -133,7 +133,7 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 
 ### Step 3: Create VPC and Subnets
 
-1. Go to **AWS Console** → **VPC** → **Create VPC**
+1. Go to **AWS Console** → **VPC** → **Create VPC** and Select **VPC only** option.
    - Name: `UniEventVPC`
    - IPv4 CIDR: `10.0.0.0/16`
    - Click **Create VPC**
@@ -144,32 +144,25 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
    - Name: `UniEvent-Public-AZ-a`
    - Availability Zone: `us-east-1a`
    - CIDR: `10.0.1.0/24`
-
-3. Create a second **Public Subnet** for AZ-b:
-   - Name: `UniEvent-Public-AZ-b`
-   - Availability Zone: `us-east-1b`
-   - CIDR: `10.0.2.0/24`
-
-4. Create **Private Subnet** (for EC2):
+   - 
+3. Create **Private Subnet** (for EC2):
    - Name: `UniEvent-Private-AZ-a`
    - Availability Zone: `us-east-1a`
    - CIDR: `10.0.3.0/24`
 
-5. Create a second **Private Subnet** for AZ-b:
-   - Name: `UniEvent-Private-AZ-b`
-   - Availability Zone: `us-east-1b`
-   - CIDR: `10.0.4.0/24`
-
-6. Create an **Internet Gateway**:
+4. Create an **Internet Gateway**:
    - Go to **Internet Gateways** → **Create Internet Gateway**
    - Name: `UniEventIGW`
    - Attach it to `UniEventVPC`
 
-7. Create and Update the **Route Table** for public subnets:
+5. Create and Update the **Route Table** for public and private subnets:
    - Go to **Route Tables** → select create route table
-   - Add name `UniEventRT` and select the VPC.
+   - Add name `UniEventPriRT` and select the VPC.
    - Then Select Create Route Table.
-   - Go to **edit routes** Add route: Destination `0.0.0.0/0` → Target: `UniEventIGW`
+   - Then associate it with Private subnets.
+   - For **Public Subnets**:
+   - Add name `UniEventRT` and select the VPC.
+   - Go to **edit routes** Add route: Destination `0.0.0.0/0` → Target: `UniEventIGW` 
    - Associate this route table with both public subnets
 
 ---
@@ -179,53 +172,61 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 1. Go to **AWS Console** → **S3** → **Create Bucket**
 2. Bucket name: `unievents-images-bucket` *(must be globally unique — add your name if needed)*
 3. Region: `us-east-1`
-4. **Block all public access**: Keep this ON (our app accesses S3 through IAM role, not publicly)
+4. **Block all public access**: Keep this ON and check it(our app accesses S3 through IAM role, not publicly)
 5. Click **Create Bucket**
 
 6. Update `s3_helper.py` with your bucket name:
    ```python
-   S3_BUCKET_NAME = "unievents-images-bucket"  # your actual bucket name
+   S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "unievents-images-bucket") # your actual bucket name
    ```
 
 ---
 
 ### Step 5: Launch EC2 Instances
 
-Repeat these steps **twice** — once for AZ-a, once for AZ-b.
-
 1. Go to **AWS Console** → **EC2** → **Launch Instance**
-2. Name: `UniEvent-EC2-AZ-a` (and `UniEvent-EC2-AZ-b` for the second)
-3. AMI: **Amazon Linux 2023** (free tier eligible)
-4. Instance type: `t2.micro` (free tier)
+2. Name: `UniEvent-EC2-AZ-a` 
+3. AMI: **Ubuntu Server 24.04** 
+4. Instance type: `t3.micro` 
 5. Key pair: Create or select an existing key pair (save the `.pem` file)
 6. Network settings:
    - VPC: `UniEventVPC`
-   - Subnet: `UniEvent-Private-AZ-a` (use AZ-b for the second instance)
+   - Subnet: `UniEvent-Private-AZ-a` 
    - Auto-assign public IP: **Disable** (private subnet — no direct internet)
-7. Security Group: Create new
-   - Name: `UniEvent-SG`
-   - Inbound rule: Allow **port 5000** from the Load Balancer's security group
-8. Advanced → **IAM instance profile**: Select `UniEventEC2Role`
-9. Click **Launch Instance**
+7. Security Group:
+   - Name: `UniEvent-SG` or leave default
+   - Inbound rule: Follow Three steps:
+   - 1): Select ssh in upper box and My Ip in down box.
+   - 2): Select Add Security Group Rule
+   - 3): Select**Custom TCP** Allow **port 5000** in upperbox and, custom with source 10.0.0.0/16 in down box.
+8. Click **Launch Instance**
+9. Network settings:
+   - VPC: `UniEventVPC`
+   - Name: `Bastian Host`
+   - Subnet: `UniEvent-Public-AZ-a` (use AZ-b for the second instance)
+   - Auto-assign public IP: **Enable** 
+10. Click **Launch Instance**
 
 ---
 
 ### Step 6: Deploy the Application
 
-SSH into each EC2 instance and run these commands:
+Go to connect to instance and SSH into each EC2 instance and run these commands:
 
 ```bash
-# 1. Connect to EC2 (use a bastion host or AWS Systems Manager)
+# 1. Connect to EC2 (use a bastion host)
+chmod 400 "your key.pem"
 ssh -i your-key.pem ec2-user@YOUR_EC2_PRIVATE_IP
 
 # 2. Update the system
-sudo yum update -y
+sudo apt update -y
 
-# 3. Install Python and pip
-sudo yum install python3 python3-pip -y
+# 3. Check Python version
+python3 --version
 
 # 4. Clone your GitHub repository
-sudo yum install git -y
+sudo apt install git -y
+git --version
 git clone https://github.com/YOUR_USERNAME/unievents.git
 cd unievents
 
