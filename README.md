@@ -165,9 +165,11 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
    - Name: `UniEventIGW`
    - Attach it to `UniEventVPC`
 
-7. Update the **Route Table** for public subnets:
-   - Go to **Route Tables** → select the route table for your VPC
-   - Add route: Destination `0.0.0.0/0` → Target: `UniEventIGW`
+7. Create and Update the **Route Table** for public subnets:
+   - Go to **Route Tables** → select create route table
+   - Add name `UniEventRT` and select the VPC.
+   - Then Select Create Route Table.
+   - Go to **edit routes** Add route: Destination `0.0.0.0/0` → Target: `UniEventIGW`
    - Associate this route table with both public subnets
 
 ---
