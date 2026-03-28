@@ -18,8 +18,9 @@ A cloud-hosted web application where students can browse university events, fetc
    - [Step 4: Create S3 Bucket](#step-4-create-s3-bucket)
    - [Step 5: Launch EC2 Instances](#step-5-launch-ec2-instances)
    - [Step 6: Deploy the Application](#step-6-deploy-the-application)
-   - [Step 7: Set Up Elastic Load Balancer](#step-7-set-up-elastic-load-balancer)
-   - [Step 8: Test the System](#step-8-test-the-system)
+   - [Step 7: Opening in Browser](#step-7-opening-in-browser)
+   - [Step 8: Set Up Elastic Load Balancer](#step-8-set-up-elastic-load-balancer)
+   - [Step 9: Test the System](#step-9-test-the-system)
 6. [How the Application Works](#how-the-application-works)
 7. [Security Design](#security-design)
 8. [Fault Tolerance](#fault-tolerance)
@@ -55,7 +56,7 @@ Internet (Students)
         ^
         |
 [Ticketmaster API]  <-- External events fetched every 30 min
-        
+
 [IAM Role]  <-- Grants EC2 permission to access S3
 [VPC]       <-- Isolates all resources in private network
 ```
@@ -122,9 +123,9 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 
 1. Log in to **AWS Console** → go to **IAM**
 2. Click **Roles** → **Create Role**
-3. Select **AWS Account**
+3. Select **AWS Service** as Trusted entity type → choose **EC2**
 4. Click **Next** and attach the policy: `AmazonS3FullAccess`
-5. Click **Next** and Name the role: `UniEventEC2Role`
+5. Click **Next** and name the role: `UniEventEC2Role`
 6. Click **Create Role**
 
 > This role will be attached to your EC2 instances in Step 5.
@@ -133,7 +134,7 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 
 ### Step 3: Create VPC and Subnets
 
-1. Go to **AWS Console** → **VPC** → **Create VPC** and Select **VPC only** option.
+1. Go to **AWS Console** → **VPC** → **Create VPC** and select the **VPC only** option.
    - Name: `UniEventVPC`
    - IPv4 CIDR: `10.0.0.0/16`
    - Click **Create VPC**
@@ -144,26 +145,40 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
    - Name: `UniEvent-Public-AZ-a`
    - Availability Zone: `us-east-1a`
    - CIDR: `10.0.1.0/24`
-   - 
-3. Create **Private Subnet** (for EC2):
+
+3. Create a second **Public Subnet** for AZ-b:
+   - Name: `UniEvent-Public-AZ-b`
+   - Availability Zone: `us-east-1b`
+   - CIDR: `10.0.2.0/24`
+
+4. Create **Private Subnet** (for EC2):
    - Name: `UniEvent-Private-AZ-a`
    - Availability Zone: `us-east-1a`
    - CIDR: `10.0.3.0/24`
 
-4. Create an **Internet Gateway**:
+5. Create a second **Private Subnet** for AZ-b:
+   - Name: `UniEvent-Private-AZ-b`
+   - Availability Zone: `us-east-1b`
+   - CIDR: `10.0.4.0/24`
+
+6. Create an **Internet Gateway**:
    - Go to **Internet Gateways** → **Create Internet Gateway**
    - Name: `UniEventIGW`
    - Attach it to `UniEventVPC`
 
-5. Create and Update the **Route Table** for public and private subnets:
-   - Go to **Route Tables** → select create route table
-   - Add name `UniEventPriRT` and select the VPC.
-   - Then Select Create Route Table.
-   - Then associate it with Private subnets.
-   - For **Public Subnets**:
-   - Add name `UniEventRT` and select the VPC.
-   - Go to **edit routes** Add route: Destination `0.0.0.0/0` → Target: `UniEventIGW` 
-   - Associate this route table with both public subnets
+7. Create and update the **Route Tables** for public and private subnets:
+
+   **Private Route Table:**
+   - Go to **Route Tables** → **Create Route Table**
+   - Name: `UniEventPriRT`, select `UniEventVPC`
+   - Click **Create Route Table**
+   - Associate it with both private subnets
+
+   **Public Route Table:**
+   - Go to **Route Tables** → **Create Route Table**
+   - Name: `UniEventRT`, select `UniEventVPC`
+   - Go to **Edit Routes** → add route: Destination `0.0.0.0/0` → Target: `UniEventIGW`
+   - Associate it with both public subnets
 
 ---
 
@@ -172,51 +187,60 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 1. Go to **AWS Console** → **S3** → **Create Bucket**
 2. Bucket name: `unievents-images-bucket` *(must be globally unique — add your name if needed)*
 3. Region: `us-east-1`
-4. **Block all public access**: Keep this ON and check it(our app accesses S3 through IAM role, not publicly)
+4. **Block all public access**: Keep this ON and checked (our app accesses S3 through IAM role, not publicly)
 5. Click **Create Bucket**
 
 6. Update `s3_helper.py` with your bucket name:
    ```python
-   S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "unievents-images-bucket") # your actual bucket name
+   S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "unievents-images-bucket")  # your actual bucket name
    ```
 
 ---
 
 ### Step 5: Launch EC2 Instances
 
+> **Note:** You will launch three instances total — two private EC2 instances (AZ-a and AZ-b) for the app, and one Bastion Host in the public subnet for SSH access.
+
+**Private EC2 Instances (repeat for AZ-a and AZ-b):**
+
 1. Go to **AWS Console** → **EC2** → **Launch Instance**
-2. Name: `UniEvent-EC2-AZ-a` 
-3. AMI: **Ubuntu Server 24.04** 
-4. Instance type: `t3.micro` 
+2. Name: `UniEvent-EC2-AZ-a` (use `UniEvent-EC2-AZ-b` for the second)
+3. AMI: **Ubuntu Server 24.04**
+4. Instance type: `t3.micro`
 5. Key pair: Create or select an existing key pair (save the `.pem` file)
 6. Network settings:
    - VPC: `UniEventVPC`
-   - Subnet: `UniEvent-Private-AZ-a` 
-   - Auto-assign public IP: **Disable** (private subnet — no direct internet)
+   - Subnet: `UniEvent-Private-AZ-a` (use `UniEvent-Private-AZ-b` for the second)
+   - Auto-assign public IP: **Disable**
 7. Security Group:
-   - Name: `UniEvent-SG` or leave default
-   - Inbound rule: Follow Three steps:
-   - 1): Select ssh in upper box and My Ip in down box.
-   - 2): Select Add Security Group Rule
-   - 3): Select**Custom TCP** Allow **port 5000** in upperbox and, custom with source 10.0.0.0/16 in down box.
+   - Name: `UniEvent-SG`
+   - Inbound rules:
+     1. Type: **SSH**, Port: `22`, Source type: **My IP**
+     2. Click **Add Security Group Rule** → Type: **Custom TCP**, Port: `5000`, Source type: **Custom**, Source: `10.0.0.0/16`
 8. Click **Launch Instance**
-9. Network settings:
+
+**Bastion Host (for SSH tunneling into private instances):**
+
+1. Go to **EC2** → **Launch Instance**
+2. Name: `Bastion-Host`
+3. AMI: **Ubuntu Server 24.04**
+4. Instance type: `t3.micro`
+5. Network settings:
    - VPC: `UniEventVPC`
-   - Name: `Bastian Host`
-   - Subnet: `UniEvent-Public-AZ-a` (use AZ-b for the second instance)
-   - Auto-assign public IP: **Enable** 
-10. Click **Launch Instance**
+   - Subnet: `UniEvent-Public-AZ-a`
+   - Auto-assign public IP: **Enable**
+6. Click **Launch Instance**
 
 ---
 
 ### Step 6: Deploy the Application
 
-Go to connect to instance and SSH into each EC2 instance and run these commands:
+SSH into each private EC2 instance through the Bastion Host and run these commands:
 
 ```bash
-# 1. Connect to EC2 (use a bastion host)
-chmod 400 "your key.pem"
-ssh -i your-key.pem ec2-user@YOUR_EC2_PRIVATE_IP
+# 1. Connect to EC2 via Bastion Host
+chmod 400 "your-key.pem"
+ssh -i your-key.pem ubuntu@YOUR_EC2_PRIVATE_IP
 
 # 2. Update the system
 sudo apt update -y
@@ -224,35 +248,54 @@ sudo apt update -y
 # 3. Check Python version
 python3 --version
 
-# 4. Clone your GitHub repository
+# 4. Install Git and clone your GitHub repository
 sudo apt install git -y
 git --version
 git clone https://github.com/YOUR_USERNAME/unievents.git
 cd unievents
 
-# 5. Install Python dependencies
-pip3 install -r requirements.txt
+# 5. Set up virtual environment and install dependencies
+sudo apt install python3-pip -y
+sudo apt install python3-venv -y
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
 # 6. Set environment variables
 export TICKETMASTER_API_KEY=YOUR_ACTUAL_API_KEY
 export S3_BUCKET_NAME=unievents-images-bucket
 export AWS_REGION=us-east-1
 
-# 7. Run the application
+# 7. Verify they are set
+echo $TICKETMASTER_API_KEY
+echo $S3_BUCKET_NAME
+echo $AWS_REGION
+
+# 8. Make sure the IAM role UniEventEC2Role is attached to the instance
+#    AWS Console → EC2 → Select Instance → Actions → Security → Modify IAM Role
+
+# 9. Run the application
 python3 app.py
 ```
 
-To keep the app running after you disconnect:
+---
 
-```bash
-nohup python3 app.py > app.log 2>&1 &
-```
+### Step 7: Opening in Browser
 
-Repeat **Steps 5 and 6** for the second EC2 instance (AZ-b).
+1. If you see **Press CTRL+C to quit** in your terminal, the app is running successfully.
+2. In your **local machine terminal**, run the following to tunnel through the Bastion Host:
+   ```bash
+   ssh -i ~/your-key.pem -L 5000:PRIVATE_EC2_IP:5000 ubuntu@BASTION_PUBLIC_IP
+   ```
+   Replace `PRIVATE_EC2_IP` with your private EC2 instance's private IP and `BASTION_PUBLIC_IP` with your Bastion Host's public IP.
+3. Open your browser and go to:
+   ```
+   http://localhost:5000/
+   ```
 
 ---
 
-### Step 7: Set Up Elastic Load Balancer
+### Step 8: Set Up Elastic Load Balancer
 
 1. Go to **AWS Console** → **EC2** → **Load Balancers** → **Create Load Balancer**
 2. Select **Application Load Balancer**
@@ -260,37 +303,31 @@ Repeat **Steps 5 and 6** for the second EC2 instance (AZ-b).
 4. Scheme: **Internet-facing**
 5. Network mapping:
    - VPC: `UniEventVPC`
-   - Availability Zones: Select **both public subnets** (`AZ-a` and `AZ-b`)
+   - Availability Zones: Select **both public subnets** (`UniEvent-Public-AZ-a` and `UniEvent-Public-AZ-b`)
 6. Security Group: Create new
    - Allow inbound **port 80** (HTTP) from `0.0.0.0/0` (anywhere)
 7. Listener: HTTP on port 80
-
 8. Create a **Target Group**:
    - Name: `UniEvent-TG`
    - Target type: Instances
-   - Protocol: HTTP, Port: 5000
+   - Protocol: HTTP, Port: `5000`
    - Health check path: `/`
-   - Register both EC2 instances as targets
-
+   - Register both private EC2 instances as targets
 9. Click **Create Load Balancer**
-
 10. Copy the **DNS name** of the Load Balancer — this is the URL students will use to access UniEvent.
 
 ---
 
-### Step 8: Test the System
+### Step 9: Test the System
 
 1. Open a browser and go to your Load Balancer DNS name:
    ```
    http://UniEvent-ALB-XXXX.us-east-1.elb.amazonaws.com
    ```
-
 2. You should see the UniEvent homepage with live events from Ticketmaster.
-
 3. **Test fault tolerance** — stop one EC2 instance and verify the site still loads:
-   - Go to EC2 → select one instance → Instance State → Stop
+   - Go to EC2 → select one instance → **Instance State** → **Stop**
    - Refresh the website — it should still work via the second instance
-
 4. **Verify S3 images** — go to your S3 bucket and confirm event images are being uploaded there.
 
 ---
