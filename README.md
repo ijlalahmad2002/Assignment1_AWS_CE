@@ -306,7 +306,7 @@ python3 app.py
 6. Security Group: Create new
    - Allow inbound **port 80** (HTTP) from `0.0.0.0/0` (anywhere)
 7. Listener: HTTP on port 80
-8. Create a **Target Group**:
+8. There will be a Popup link from that ---> Create a **Target Group**:
    - Name: `UniEvent-TG`
    - Target type: Instances
    - Protocol: HTTP, Port: `5000`
