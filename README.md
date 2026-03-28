@@ -1,8 +1,6 @@
 # Assignment1_AWS_CE
 # UniEvent — University Event Management System on AWS
 
-> CE 308/408 Cloud Computing Assignment — Ghulam Ishaq Khan Institute of Engineering Sciences and Technology
-
 A cloud-hosted web application where students can browse university events, fetched automatically from the Ticketmaster API and deployed on AWS using EC2, S3, ELB, VPC, and IAM.
 
 ---
