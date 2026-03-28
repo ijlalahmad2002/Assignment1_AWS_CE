@@ -287,7 +287,6 @@ python3 app.py
    ```bash
    ssh -i ~/your-key.pem -L 5000:PRIVATE_EC2_IP:5000 ubuntu@BASTION_PUBLIC_IP
    ```
-   Replace `PRIVATE_EC2_IP` with your private EC2 instance's private IP and `BASTION_PUBLIC_IP` with your Bastion Host's public IP.
 3. Open your browser and go to:
    ```
    http://localhost:5000/
