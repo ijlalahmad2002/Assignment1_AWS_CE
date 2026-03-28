@@ -1,4 +1,4 @@
-# Assignment1_AWS_CE
+# Assignment1_AWS_CE (Step by Step)
 # UniEvent — University Event Management System on AWS
 
 A cloud-hosted web application where students can browse university events, fetched automatically from the Ticketmaster API and deployed on AWS using EC2, S3, ELB, VPC, and IAM.
