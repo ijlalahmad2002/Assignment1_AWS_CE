@@ -122,9 +122,9 @@ This role allows your EC2 instances to access S3 without hardcoded passwords.
 
 1. Log in to **AWS Console** → go to **IAM**
 2. Click **Roles** → **Create Role**
-3. Select **Trusted entity type**: AWS Service → **EC2**
+3. Select **AWS Account**
 4. Click **Next** and attach the policy: `AmazonS3FullAccess`
-5. Name the role: `UniEventEC2Role`
+5. Click **Next** and Name the role: `UniEventEC2Role` or `According to your choice`
 6. Click **Create Role**
 
 > This role will be attached to your EC2 instances in Step 5.
